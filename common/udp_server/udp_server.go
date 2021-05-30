@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 )
 
 type UDPServer struct {
@@ -32,6 +33,12 @@ func New(address string, maxBufferSize int) (*UDPServer, error) {
 		packetConn:    packetConn,
 		maxBufferSize: maxBufferSize,
 	}, nil
+}
+
+func (s *UDPServer) GetPort() string {
+	addr := s.packetConn.LocalAddr().String()
+	ipAndPort := strings.Split(addr, ":")
+	return ipAndPort[1]
 }
 
 func (s *UDPServer) Close() error {

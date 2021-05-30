@@ -1,4 +1,5 @@
 package consts
 
-const DiskWriteSpeedMb = 25
-const PayloadDataSize = 250
+const MaxMemoryBufferMB = 25
+const PayloadDataSizeByte = 250
+const MaxUserLimit = 10
