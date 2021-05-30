@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/gtxistxgao/safe-udp/common/consts"
 	"github.com/gtxistxgao/safe-udp/common/model"
+	"github.com/gtxistxgao/safe-udp/common/toggle"
 	"github.com/gtxistxgao/safe-udp/common/udp_server"
 	"github.com/gtxistxgao/safe-udp/common/util"
 	"log"
@@ -38,15 +40,12 @@ TODO: 1 worker will check channel 3 and send package to client for the missing p
 
 */
 
-const DISK_WRITE_SPEED_MB = 25
-const PAYLOAD_DATA_SIZE = 250
-
 func main() {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	rawDataBufferCountLimit := DISK_WRITE_SPEED_MB * (1 << 20) / PAYLOAD_DATA_SIZE
+	rawDataBufferCountLimit := consts.DiskWriteSpeedMb * (1 << 20) / consts.PayloadDataSize
 
 	rawData := make(chan []byte, rawDataBufferCountLimit)
 	defer close(rawData)
@@ -61,25 +60,71 @@ func main() {
 		log.Println(i, " rawDataProcessWorker started")
 	}
 
-	minHeapChunk := &model.MinHeapChunk{}
-	heap.Init(minHeapChunk)
+	if toggle.SerialWrite {
+		minHeapChunk := &model.MinHeapChunk{}
+		heap.Init(minHeapChunk)
 
-	signal := make(chan *bool, rawDataBufferCountLimit)
+		signal := make(chan *bool, rawDataBufferCountLimit)
 
-	go minHeapPushWorker(ctx, minHeapChunk, processedData, signal)
-	log.Println("minHeapPushWorker started")
+		go minHeapPushWorker(ctx, minHeapChunk, processedData, signal)
+		log.Println("minHeapPushWorker started")
 
-	dataToBeWritten := make(chan []byte, 1)
-	go minHeapPollWorker(ctx, minHeapChunk, signal, dataToBeWritten)
-	log.Println("minHeapPollWorker started")
+		dataToBeWritten := make(chan []byte, 1)
+		go minHeapPollWorker(ctx, minHeapChunk, signal, dataToBeWritten)
+		log.Println("minHeapPollWorker started")
 
-	go saveToDiskWorker(ctx, dataToBeWritten, "serversaved.txt")
-	log.Println("saveToDiskWorker started")
-
+		go saveToDiskWorker(ctx, dataToBeWritten, "serial.txt")
+		log.Println("saveToDiskWorker started")
+	} else {
+		// TODO: this does not work well. why?
+		go jumpWriteWorker(ctx, processedData, "jump.txt")
+		log.Println("jumpWriteWorker started")
+	}
 
 	select {
 	case <-ctx.Done():
 		fmt.Println("full process cancelled")
+	}
+}
+
+func jumpWriteWorker(ctx context.Context, processedData chan *model.Chunk, filePath string) {
+	go func(processedData chan *model.Chunk) {
+		file, err := os.Create(filePath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		defer func() {
+			if err := file.Close(); err != nil {
+				log.Println("Close file failed: ", err)
+			}
+		}()
+
+		for {
+			data := <-processedData
+			if data == nil {
+				fmt.Println("jumpWriteWorker routine finished")
+				break
+			}
+
+			offset := int64(consts.PayloadDataSize * data.Index)
+			if n, writeErr := file.WriteAt(data.Data, offset); writeErr != nil {
+				log.Println("Write data to disk error: ", writeErr)
+				break
+			} else {
+				log.Printf("Chunk Index %d, %d bytes saved.\n", data.Index, n)
+			}
+		}
+	}(processedData)
+
+	select {
+	case <-ctx.Done():
+		for len(processedData) > 0 {
+			<-processedData
+		}
+
+		processedData <- nil
+		fmt.Println("jumpWriteWorker cancelled")
 	}
 }
 
