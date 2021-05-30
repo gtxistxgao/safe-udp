@@ -64,6 +64,7 @@ func (c *Controller) userGreeter(ready chan *bool, userChan chan *user.User) {
 		}
 
 		newUser := user.New(conn)
+		log.Println("New user joined")
 		c.userMap[conn.RemoteAddr().String()] = newUser
 		userChan <- newUser
 	}
@@ -86,6 +87,7 @@ func (c *Controller) userManager(ready chan *bool, userChan chan *user.User) {
 			break
 		}
 
+		log.Println("User started")
 		newUser.Start()
 		ready <- util.BoolPtr(true)
 	}

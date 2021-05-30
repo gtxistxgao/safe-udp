@@ -1,5 +1,5 @@
 package consts
 
-const MaxMemoryBufferMB = 25
+const MaxMemoryBufferMB = 100
 const PayloadDataSizeByte = 250
 const MaxUserLimit = 10

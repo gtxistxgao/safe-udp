@@ -1,4 +1,8 @@
 package consts
 
-const UdpPort  = "UdpPort:"
-const NeedPacket  = "NeedPacket:"
+const NeedPacket = "NeedPacket:"
+const Finished = "Finished"
+
+
+
+const Validate = "validate"

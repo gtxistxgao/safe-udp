@@ -21,17 +21,18 @@ func New(conn net.Conn) *TcpConn {
 
 // Tell user which UDP port the server is listen to
 func (t *TcpConn) SendPort(port string) {
-	msg := consts.UdpPort + port
-	_, err := t.conn.Write([]byte(msg))
+	_, err := t.conn.Write([]byte(port + "\n"))
 	if err != nil {
-		log.Println("Fail to tell user the port. Error: ", err)
+		log.Println("Fail to tell user the port. Error:", err)
 	} else {
-		log.Println("Told user the UCP port is ", port)
+		log.Println("Told user the UCP port is", port)
 	}
 }
 
 func (t *TcpConn) GetFileInfo() filemeta.FileMeta {
+	log.Println("Waiting for file info")
 	info := t.Wait()
+	log.Println("Raw file meta message", info)
 	fileMeta := filemeta.FileMeta{}
 	err := json.Unmarshal([]byte(info), &fileMeta)
 	if err != nil {
@@ -39,6 +40,16 @@ func (t *TcpConn) GetFileInfo() filemeta.FileMeta {
 	}
 
 	return fileMeta
+}
+
+func (t *TcpConn) SendFinishSignal() {
+	msg := consts.Finished
+	_, err := t.conn.Write([]byte(msg + "\n"))
+	if err != nil {
+		log.Printf("Fail to send finish signal, Error: %s \n", err)
+	} else {
+		log.Printf("Told user we have finished.\n", )
+	}
 }
 
 func (t *TcpConn) RequestPacket(index uint32) {
@@ -57,7 +68,11 @@ func (t *TcpConn) Wait() string {
 		log.Println(err)
 	}
 
-	return message
+	if len(message) == 0 {
+		return message
+	}
+
+	return message[:len(message)-1]
 }
 
 func (t *TcpConn) GetLocalInfo() string {

@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"time"
 )
 
 type User struct {
@@ -45,11 +46,11 @@ func New(conn net.Conn) *User {
 }
 
 func (u *User) Start() {
-	totalChannelCount := 4
-	rawDataBufferCountLimit := (consts.MaxMemoryBufferMB * (1 << 20)) / totalChannelCount / consts.PayloadDataSizeByte
+	rawDataBufferCountLimit := (consts.MaxMemoryBufferMB * (1 << 20)) / consts.PayloadDataSizeByte
 	rawData := make(chan []byte, rawDataBufferCountLimit)
 	defer close(rawData)
 
+	// sync with client about the file
 	u.preSync()
 
 	go u.serverWorker(u.ctx, rawData)
@@ -77,20 +78,29 @@ func (u *User) Start() {
 	go u.saveToDiskWorker(u.ctx, dataToBeWritten, u.fileInfo.Name)
 	log.Println("saveToDiskWorker started")
 
+	u.tcpConn.SendPort("Server prepare ready\n") // tell client to start to send
+
+	go u.sync()
+
 	select {
 	case <-u.ctx.Done():
 		fmt.Printf("User %s finished task\n", u.tcpConn.GetLocalInfo())
 	}
 }
 
-func (u *User) Sync() {
+func (u *User) sync() {
 	go func() {
 		for {
 			message := u.tcpConn.Wait()
-			fmt.Printf("Message received from User %s", message)
+			log.Printf("Message received from User %s\n", message)
 			u.triage(message)
 		}
 	}()
+
+	select {
+	case <-u.ctx.Done():
+		log.Println("sync finished")
+	}
 }
 
 func (u *User) triage(msg string) {
@@ -98,9 +108,13 @@ func (u *User) triage(msg string) {
 	case "beat":
 		log.Println("The user is still there.")
 		break
-	case "validate":
+	case consts.Validate:
 		log.Println("User finished send all package. we need to do validation")
 		u.validate()
+		break
+	case "EOF":
+		log.Println("All Validation is done. Cleaning up")
+		u.Close()
 		break
 	case "finish":
 		log.Println("All Validation is done. Cleaning up")
@@ -114,10 +128,19 @@ func (u *User) beat() {
 }
 
 func (u *User) validate() {
-	finished := u.progress == uint32(u.fileInfo.Size/consts.PayloadDataSizeByte)
+	totalPacketCount := uint32(u.fileInfo.Size / consts.PayloadDataSizeByte)
+	if u.fileInfo.Size%consts.PayloadDataSizeByte != 0 {
+		totalPacketCount++
+	}
+
+	finished := u.progress == totalPacketCount
 	if finished {
+		log.Printf("All required %d packets received\n", u.progress)
 		// we can clean up  resources
+		u.tcpConn.SendFinishSignal()
+		time.Sleep(time.Second)
 		u.Close()
+
 	} else {
 		// hay we are not finished yet. send me this packet again!
 		u.tcpConn.RequestPacket(u.progress)
@@ -127,11 +150,12 @@ func (u *User) validate() {
 func (u *User) preSync() {
 	// Tell user which UDP port to send to
 	port := u.udpServer.GetPort()
-	log.Println("It's listening to port ", port)
+	log.Println("Tell client we are listening to this port", port)
 	u.tcpConn.SendPort(port) // tell user which UDP port to sent file
 
 	// Learn the file info
 	u.fileInfo = u.tcpConn.GetFileInfo()
+	log.Println("Got file info", u.fileInfo.String())
 }
 
 func (u *User) serverWorker(ctx context.Context, rawData chan []byte) {
@@ -233,8 +257,6 @@ func (u *User) minHeapPollWorker(ctx context.Context, minHeapChunk *model.MinHea
 			if minHeapChunk.IsEmpty() {
 				fmt.Printf("Min heap top is empty! Ask User send chunk %d. \n", u.progress)
 				u.tcpConn.RequestPacket(u.progress)
-				tryAgain := true
-				signal <- &tryAgain
 				continue
 			}
 
@@ -245,12 +267,10 @@ func (u *User) minHeapPollWorker(ctx context.Context, minHeapChunk *model.MinHea
 			}
 
 			topIndex := minHeapChunk.Peek().Index
-			if topIndex != u.progress {
+			if topIndex > u.progress {
 				log.Printf("Expect index %d, but top package %d.\n", u.progress, topIndex)
 				u.tcpConn.RequestPacket(u.progress)
 				fmt.Printf("Requested User send chunk %d. \n", u.progress)
-				tryAgain := true
-				signal <- &tryAgain
 				continue
 			}
 
@@ -294,7 +314,7 @@ func (u *User) saveToDiskWorker(ctx context.Context, dataToBeWritten chan *model
 			if n, writeErr := file.Write(chunk.Data); writeErr != nil {
 				u.tcpConn.RequestPacket(chunk.Index)
 				log.Printf("Fail to write index %d to disk. Ask user send it again. Error: %s", chunk.Index, writeErr)
-				break
+				continue
 			} else {
 				log.Printf("Write %d bytes data into disk\n", n)
 

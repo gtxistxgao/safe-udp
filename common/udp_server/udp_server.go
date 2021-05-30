@@ -22,12 +22,13 @@ func New(address string, maxBufferSize int) (*UDPServer, error) {
 	// from ListenUDP (UDPConn) - the only difference is that `Packet*`
 	// methods and interfaces are more broad, also covering `ip`.
 
-	fmt.Println("Start to listen to: ", address)
 	packetConn, err := net.ListenPacket("udp", address)
 	if err != nil {
 		log.Printf("Got error when start to listen to address %s. Error: %s", address, err)
 		return nil, err
 	}
+
+	fmt.Println("Start to listen to: ", packetConn.LocalAddr().String())
 
 	return &UDPServer{
 		packetConn:    packetConn,
@@ -37,8 +38,9 @@ func New(address string, maxBufferSize int) (*UDPServer, error) {
 
 func (s *UDPServer) GetPort() string {
 	addr := s.packetConn.LocalAddr().String()
+	log.Println("Get local address", addr)
 	ipAndPort := strings.Split(addr, ":")
-	return ipAndPort[1]
+	return ipAndPort[len(ipAndPort)-1]
 }
 
 func (s *UDPServer) Close() error {

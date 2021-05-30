@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"syscall"
 	"time"
 )
 
@@ -45,6 +46,16 @@ func (c *UDPClient) Close() {
 	// Closes the underlying file descriptor associated with the,
 	// socket so that it no longer refers to any file.
 	defer c.conn.Close()
+}
+
+func (c *UDPClient) SetBufferValue(bufferValue int) {
+	c.conn.SetWriteBuffer(bufferValue)
+}
+
+func (c *UDPClient) GetBufferValue() int {
+	fd, _ := c.conn.File()
+	value, _ := syscall.GetsockoptInt(int(fd.Fd()), syscall.SOL_SOCKET, syscall.SO_SNDBUF)
+	return value
 }
 
 func (c *UDPClient) SendAsync(ctx context.Context, chunk []byte) error {
