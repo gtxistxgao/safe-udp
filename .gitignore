@@ -18,3 +18,6 @@
 
 *.mov
 .DS_Store
+
+/server/*.txt
+*.log

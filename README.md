@@ -54,3 +54,66 @@ The process works as follow:
       - if validation passed
         - Told client all packets received
         - Env clean up like cancel context
+
+# Server log
+
+```
+server.log                                                                           ─╯
+2021/05/30 10:47:41 New user joined
+2021/05/30 10:47:41 User started
+2021/05/30 10:47:41 Get local address [::]:64070
+2021/05/30 10:47:41 Tell client we are listening to this port 64070
+2021/05/30 10:47:41 Told user the UCP port is 64070
+2021/05/30 10:47:41 Waiting for file info
+2021/05/30 10:47:41 Raw file meta message {"name":"small.txt","size":32}
+2021/05/30 10:47:41 Got file info File name: small.txt. File size 32
+2021/05/30 10:47:41 0  rawDataProcessWorker started
+2021/05/30 10:47:41 1  rawDataProcessWorker started
+2021/05/30 10:47:41 2  rawDataProcessWorker started
+2021/05/30 10:47:41 3  rawDataProcessWorker started
+2021/05/30 10:47:41 4  rawDataProcessWorker started
+2021/05/30 10:47:41 5  rawDataProcessWorker started
+2021/05/30 10:47:41 6  rawDataProcessWorker started
+2021/05/30 10:47:41 7  rawDataProcessWorker started
+2021/05/30 10:47:41 8  rawDataProcessWorker started
+2021/05/30 10:47:41 9  rawDataProcessWorker started
+2021/05/30 10:47:41 minHeapPushWorker started
+2021/05/30 10:47:41 minHeapPollWorker started
+2021/05/30 10:47:41 saveToDiskWorker started
+2021/05/30 10:47:41 Told user the UCP port is Server prepare ready
+
+2021/05/30 10:47:41 Successfully processed data chunk 0 and pushed into processedDataQueue.
+2021/05/30 10:47:41 Write 32 bytes data into disk
+2021/05/30 10:47:41 Message received from User validate
+2021/05/30 10:47:41 User finished send all package. we need to do validation
+2021/05/30 10:47:41 All required 1 packets received
+2021/05/30 10:47:41 Told user we have finished.
+2021/05/30 10:47:42 read tcp 127.0.0.1:8888->127.0.0.1:53666: use of closed network connection
+2021/05/30 10:47:42 Message received from User 
+2021/05/30 10:47:42 read tcp 127.0.0.1:8888->127.0.0.1:53666: use of closed network connection
+2021/05/30 10:47:42 Message received from User 
+2021/05/30 10:47:42 sync finished
+```
+
+# Client log
+
+```
+2021/05/30 10:47:41 Start to dial server
+2021/05/30 10:47:41 Got UDP port 64070
+2021/05/30 10:47:41 UDP buffer value is: 9216
+2021/05/30 10:47:41 Send file info {"name":"small.txt","size":32}
+2021/05/30 10:47:41 Server prepare ready
+
+2021/05/30 10:47:41 indexChan limit 1
+2021/05/30 10:47:41 readAndEmitWorker started.
+2021/05/30 10:47:41 feedbackWorker started.
+2021/05/30 10:47:41 Total packet count 1
+2021/05/30 10:47:41 Push index 0 into channel
+2021/05/30 10:47:41 start to read chunk with index 0
+2021/05/30 10:47:41 file read offset 0
+2021/05/30 10:47:41 Asked server to validate 9 bytes
+2021/05/30 10:47:41 Server is asking Finished
+
+2021/05/30 10:47:41 Finished, so we can cancel context
+2021/05/30 10:47:42 Fully cancelled
+```

@@ -28,7 +28,7 @@ func main() {
 
 	fmt.Println("Start to open file")
 	start := time.Now()
-	file, err := os.Open("big.txt")
+	file, err := os.Open("small.txt")
 	if err != nil {
 		fmt.Print(err)
 	}
