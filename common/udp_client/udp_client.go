@@ -3,6 +3,7 @@ package udp_client
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"syscall"
 	"time"
@@ -75,7 +76,7 @@ func (c *UDPClient) SendAsync(ctx context.Context, chunk []byte) error {
 			return
 		}
 
-		fmt.Printf("packet-written: bytes=%d\n", n)
+		log.Printf("packet-written: bytes=%d\n", n)
 		doneChan <- nil
 	}()
 

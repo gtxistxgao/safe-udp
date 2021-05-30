@@ -90,7 +90,7 @@ func (u *User) Start() {
 		fmt.Printf("User %s finished task\n", u.userInfo)
 	}
 
-	fmt.Printf("User %s finished task\n", u.userInfo)
+	time.Sleep(time.Second)
 }
 
 func (u *User) sync() {
@@ -342,7 +342,7 @@ func (u *User) saveToDiskWorker(ctx context.Context, dataToBeWritten chan *model
 				log.Printf("Fail to write index %d to disk. Ask user send it again. Error: %s", chunk.Index, writeErr)
 				continue
 			} else {
-				log.Printf("Write %d bytes data into disk\n", n)
+				log.Printf("Write Chunk %d, %d bytes data into disk\n", chunk.Index, n)
 
 			}
 		}

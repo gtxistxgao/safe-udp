@@ -21,3 +21,8 @@
 
 /server/*.txt
 *.log
+
+/server/*.pdf
+/server/*.log
+/client/*.pdf
+/client/*.log

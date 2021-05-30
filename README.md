@@ -58,52 +58,84 @@ The process works as follow:
 # Server log
 
 ```
-╰─ go run server.go > server.log                                                                           ─╯
-2021/05/30 11:05:34 controller.go:67: New user joined
-2021/05/30 11:05:34 controller.go:90: User started
-2021/05/30 11:05:34 udp_server.go:41: Get local address [::]:61752
-2021/05/30 11:05:34 user.go:179: Tell client we are listening to this port 61752
-2021/05/30 11:05:34 tcpconn.go:28: Told user the UCP port is 61752
-2021/05/30 11:05:34 tcpconn.go:33: Waiting for file info
-2021/05/30 11:05:34 tcpconn.go:35: Raw file meta message {"name":"small.txt","size":32}
-2021/05/30 11:05:34 user.go:184: Got file info File name: small.txt. File size 32
-2021/05/30 11:05:34 user.go:66: 0  rawDataProcessWorker started
-2021/05/30 11:05:34 user.go:75: minHeapPushWorker started
-2021/05/30 11:05:34 user.go:79: minHeapPollWorker started
-2021/05/30 11:05:34 user.go:82: saveToDiskWorker started
-2021/05/30 11:05:34 tcpconn.go:28: Told user the UCP port is Server prepare ready
+╰─ go run server.go                                                                                                                                                                                                                                 ─╯
+Start to listen to:  [::]:63543
+2021/05/30 12:14:22 controller.go:67: New user joined
+2021/05/30 12:14:22 controller.go:90: User started
+2021/05/30 12:14:22 udp_server.go:41: Get local address [::]:63543
+2021/05/30 12:14:22 user.go:179: Tell client we are listening to this port 63543
+2021/05/30 12:14:22 tcpconn.go:29: Told user the UCP port is 63543
+2021/05/30 12:14:22 tcpconn.go:34: Waiting for file info
+2021/05/30 12:14:22 tcpconn.go:36: Raw file meta message {"name":"small.txt","size":32}
+2021/05/30 12:14:22 user.go:184: Got file info File name: small.txt. File size 32
+2021/05/30 12:14:22 user.go:66: 0  rawDataProcessWorker started
+2021/05/30 12:14:22 user.go:75: minHeapPushWorker started
+2021/05/30 12:14:22 user.go:79: minHeapPollWorker started
+2021/05/30 12:14:22 user.go:82: saveToDiskWorker started
+2021/05/30 12:14:22 tcpconn.go:29: Told user the UCP port is Server prepare ready
 
-2021/05/30 11:05:34 user.go:230: Successfully processed data chunk 0 and pushed into processedDataQueue.
-2021/05/30 11:05:34 user.go:345: Write 32 bytes data into disk
-2021/05/30 11:05:34 user.go:113: Message received from User validate
-2021/05/30 11:05:34 user.go:138: User finished send all package. we need to do validation
-2021/05/30 11:05:34 user.go:164: All required 1 packets received
-2021/05/30 11:05:34 tcpconn.go:51: Told user we have finished.
-2021/05/30 11:05:35 tcpconn.go:68: read tcp 127.0.0.1:8888->127.0.0.1:54049: use of closed network connection
-2021/05/30 11:05:35 user.go:108: Connection closed. Stop sync
-2021/05/30 11:05:35 user.go:128: sync finished
+2021/05/30 12:14:22 user.go:113: Message received from User validate
+2021/05/30 12:14:22 user.go:138: User finished send all package. we need to do validation
+2021/05/30 12:14:22 tcpconn.go:62: Told user to send the packet 0 again. Msg: NeedPacket:0
+packet-received: bytes=46 from=127.0.0.1:54119
+Got raw data with size:  46
+2021/05/30 12:14:22 user.go:230: Successfully processed data chunk 0 and pushed into processedDataQueue.
+pushed data chunk 0 into min heap
+Got signal! Check the current heap top! 
+2021/05/30 12:14:22 user.go:345: Write Chunk 0, 32 bytes data into disk
+2021/05/30 12:14:22 tcpconn.go:69: EOF
+2021/05/30 12:14:22 user.go:113: Message received from User EOF
+2021/05/30 12:14:22 user.go:142: All Validation is done. Cleaning up
+2021/05/30 12:14:22 tcpconn.go:69: read tcp 127.0.0.1:8888->127.0.0.1:54642: use of closed network connection
+2021/05/30 12:14:22 user.go:108: Connection closed. Stop sync
+udp_server run done context canceled
+minHeapPushWorker cancelled
+minHeapPushWorker routine finished
+2021/05/30 12:14:22 user.go:128: sync finished
+User 127.0.0.1:8888 finished task
+saveToDiskWorker cancelled
+rawDataProcessWorker cancelled
+minHeapPollWorker routine finished
+minHeapPollWorker cancelled
+minHeapPollWorker routine finished
+Got raw data with size:  0
 ```
 
 # Client log
 
 ```
-╰─ go run client.go > client.log                                                                           ─╯
-2021/05/30 11:05:34 client.go:48: Start to dial server
-2021/05/30 11:05:34 client.go:305: Got UDP port 61752
-2021/05/30 11:05:34 client.go:64: UDP buffer value is: 9216
-2021/05/30 11:05:34 client.go:74: Send file info {"name":"small.txt","size":32}
-2021/05/30 11:05:34 client.go:81: Server prepare ready
+╰─ go run client.go                                                                                        ─╯
+2021/05/30 12:14:22 client.go:49: Start to dial server
+2021/05/30 12:14:22 client.go:342: Got UDP port 63543
+2021/05/30 12:14:22 client.go:62: UDP buffer value is: 9216
+2021/05/30 12:14:22 client.go:65: Start to open file
+2021/05/30 12:14:22 client.go:85: Send file info {"name":"small.txt","size":32}
+2021/05/30 12:14:22 client.go:92: Server prepare ready
 
-2021/05/30 11:05:34 client.go:95: indexChan limit 1
-2021/05/30 11:05:34 client.go:98: readAndEmitWorker started.
-2021/05/30 11:05:34 client.go:100: feedbackWorker started.
-2021/05/30 11:05:34 client.go:107: Total packet count 1
-2021/05/30 11:05:34 client.go:111: Push index 0 into channel
-2021/05/30 11:05:34 client.go:185: start to read chunk with index 0
-2021/05/30 11:05:34 client.go:188: file read offset 0
-2021/05/30 11:05:34 client.go:120: Asked server to validate 9 bytes
-2021/05/30 11:05:34 client.go:138: Server is asking Finished
-
-2021/05/30 11:05:34 client.go:141: Finished, so we can cancel context
-2021/05/30 11:05:35 client.go:144: Fully cancelled
+2021/05/30 12:14:22 client.go:126: indexChan limit 1
+2021/05/30 12:14:22 client.go:129: readAndEmitWorker started.
+2021/05/30 12:14:22 client.go:131: feedbackWorker started.
+2021/05/30 12:14:22 client.go:146: Asked server to validate 9 bytes
+2021/05/30 12:14:22 client.go:165: Server is asking NeedPacket:0
+2021/05/30 12:14:22 client.go:177: User is requesting chunk of index 0
+2021/05/30 12:14:22 client.go:185: Push index 0 into channel
+2021/05/30 12:14:22 client.go:222: start to read chunk with index 0
+2021/05/30 12:14:22 client.go:225: file read offset 0
+2021/05/30 12:14:22 client.go:227: Read index 0, 32 bytes
+2021/05/30 12:14:22 client.go:229: EOF
+packet-written: bytes=46
+2021/05/30 12:14:22 client.go:105: Start to close client
+2021/05/30 12:14:22 client.go:107: TCP Connection closed
+2021/05/30 12:14:22 client.go:155: read tcp 127.0.0.1:54642->127.0.0.1:8888: use of closed network connection
+2021/05/30 12:14:22 client.go:109: UDP Connection closed
+2021/05/30 12:14:22 client.go:105: Start to close client
+2021/05/30 12:14:22 client.go:107: TCP Connection closed
+2021/05/30 12:14:22 client.go:109: UDP Connection closed
+2021/05/30 12:14:22 client.go:111: File reader closed
+2021/05/30 12:14:22 client.go:111: File reader closed
+2021/05/30 12:14:22 client.go:113: Context closed
+2021/05/30 12:14:22 client.go:113: Context closed
+2021/05/30 12:14:22 client.go:137: full cycle done cancelled
+2021/05/30 12:14:22 client.go:256: readAndEmitWorker cancelled
+2021/05/30 12:14:22 client.go:35: Finished. cost  110.595149ms
 ```

@@ -3,6 +3,7 @@ package tcpconn
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"github.com/gtxistxgao/safe-udp/common/consts"
 	"github.com/gtxistxgao/safe-udp/common/filemeta"
 	"log"
@@ -53,12 +54,12 @@ func (t *TcpConn) SendFinishSignal() {
 }
 
 func (t *TcpConn) RequestPacket(index uint32) {
-	msg := consts.NeedPacket + string(index)
-	_, err := t.conn.Write([]byte(msg))
+	msg := fmt.Sprintf("%s%d", consts.NeedPacket, index)
+	_, err := t.conn.Write([]byte(msg + "\n"))
 	if err != nil {
 		log.Printf("Fail to request packet %d. Error: %s \n", index, err)
 	} else {
-		log.Printf("Told user to send the packet %d again.\n", index)
+		log.Printf("Told user to send the packet %d again. Msg: %s\n", index, msg)
 	}
 }
 

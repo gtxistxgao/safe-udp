@@ -10,6 +10,7 @@ import (
 	"github.com/gtxistxgao/safe-udp/common/filemeta"
 	"github.com/gtxistxgao/safe-udp/common/toggle"
 	"github.com/gtxistxgao/safe-udp/common/udp_client"
+	"github.com/gtxistxgao/safe-udp/common/util"
 	"io"
 	"log"
 	"net"
@@ -19,135 +20,171 @@ import (
 	"time"
 )
 
-var cancelFunc context.CancelFunc
+var fileName string = "small.txt"
 
 func main() {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
-	cancelFunc = cancel
 
-	fmt.Println("Start to open file")
 	start := time.Now()
-	file, err := os.Open("small.txt")
-	if err != nil {
-		fmt.Print(err)
-	}
+	c := NewClient(ctx, cancel)
+	c.Run()
 
-	defer file.Close()
+	elapsed := time.Since(start)
+	log.Println("Finished. cost ", elapsed)
+}
 
-	fileinfo, err := file.Stat()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+type Client struct {
+	ctx       context.Context
+	tcpConn   net.Conn
+	cancel    context.CancelFunc
+	file      *os.File
+	fileMeta  filemeta.FileMeta
+	udpClient *udp_client.UDPClient
+}
 
-	filesize := fileinfo.Size()
-	fmt.Println("File size: ", filesize)
-
+func NewClient(ctx context.Context, cancel context.CancelFunc) *Client {
+	// 1. setup TCP connection
 	log.Println("Start to dial server")
 	tcpConn, err := net.Dial("tcp", ":8888")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer tcpConn.Close()
-
+	// 2. create UDP client
 	udpPort, err := getUcpDstPort(tcpConn)
 	if err != nil {
 		log.Fatal("Fail to send file meta data, error:", err)
 	}
 
 	udpClient := udp_client.New(ctx, "localhost:"+udpPort, 500, time.Second*2)
-	defer udpClient.Close()
-
 	log.Println("UDP buffer value is:", udpClient.GetBufferValue())
 
-	fileMeta, err := json.Marshal(&filemeta.FileMeta{
-		Name: fileinfo.Name(),
-		Size: fileinfo.Size(),
-	})
+	// 3. exchange File metadata
+	log.Println("Start to open file")
+	file, err := os.Open(fileName)
 	if err != nil {
-		log.Fatal("Fail to send file meta data, error:", err)
+		log.Fatal(err)
 	}
 
-	log.Println("Send file info", string(fileMeta))
+	fileinfo, err := file.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	fileMetaObject := filemeta.FileMeta{
+		Name: fileinfo.Name(),
+		Size: fileinfo.Size(),
+	}
+
+	fileMeta, err := json.Marshal(&fileMetaObject)
+	if err != nil {
+		log.Fatal("Fail to parse file meta data, error:", err)
+	}
+	log.Println("Send file info", string(fileMeta))
 	if _, err := tcpConn.Write(append(fileMeta, '\n')); err != nil {
 		log.Fatal("Fail to send file meta data, error:", err)
 	}
 
+	// 4. ACK and ready to start
 	ACK, _ := bufio.NewReader(tcpConn).ReadString('\n')
 	log.Println(ACK)
 
-	if toggle.MultiThreadEmit {
-		multiThreadEmit(ctx, file, udpClient, filesize, tcpConn)
-	} else {
-		singleThreadEmit(ctx, file, udpClient, filesize, tcpConn)
+	return &Client{
+		ctx:       ctx,
+		tcpConn:   tcpConn,
+		cancel:    cancel,
+		file:      file,
+		fileMeta:  fileMetaObject,
+		udpClient: udpClient,
 	}
-
-	elapsed := time.Since(start)
-	fmt.Println("Finished. cost ", elapsed)
 }
 
-func multiThreadEmit(ctx context.Context, file *os.File, udpClient *udp_client.UDPClient, filesize int64, tcpConn net.Conn) {
+func (c *Client) Close() {
+	log.Println("Start to close client")
+	c.tcpConn.Close()
+	log.Println("TCP Connection closed")
+	c.udpClient.Close()
+	log.Println("UDP Connection closed")
+	c.file.Close()
+	log.Println("File reader closed")
+	c.cancel()
+	log.Println("Context closed")
+}
+
+func (c *Client) Run() {
+	if toggle.MultiThreadEmit {
+		c.multiThreadEmit()
+	} else {
+		c.singleThreadEmit()
+	}
+}
+
+func (c *Client) multiThreadEmit() {
 	indexChan := make(chan *uint32, 1)
 	log.Println("indexChan limit", 1)
 
-	go readAndEmitWorker(ctx, file, udpClient, indexChan)
+	go c.readAndEmitWorker(c.ctx, c.file, c.udpClient, indexChan)
 	log.Println("readAndEmitWorker started.")
-	go feedbackWorker(ctx, tcpConn, indexChan)
+	go c.feedbackWorker(c.ctx, c.tcpConn, indexChan, c.fileMeta.Size)
 	log.Println("feedbackWorker started.")
 
-	totalPacketCount := uint32(filesize / consts.PayloadDataSizeByte)
-	if filesize%consts.PayloadDataSizeByte != 0 {
-		totalPacketCount++
+	c.askServerDoValidation(c.tcpConn)
+
+	select {
+	case <-c.ctx.Done():
+		log.Println("full cycle done cancelled")
 	}
+}
 
-	log.Println("Total packet count", totalPacketCount)
-	var index uint32 = 0
-
-	for ; index < totalPacketCount; index++ {
-		log.Println("Push index", index, "into channel")
-		indexChan <- &index
-		time.Sleep(time.Millisecond)
-	}
-
+func (c *Client) askServerDoValidation(tcpConn net.Conn) {
 	n, err := tcpConn.Write([]byte(consts.Validate + "\n"))
 	if err != nil {
 		log.Println("Fail to ask server to validate", err)
 	} else {
 		log.Println("Asked server to validate", n, "bytes")
 	}
-
-	select {
-	case <-ctx.Done():
-		fmt.Println("full cycle done cancelled")
-	}
 }
 
-func feedbackWorker(ctx context.Context, tcpConn net.Conn, indexChan chan *uint32) {
+func (c *Client) feedbackWorker(ctx context.Context, tcpConn net.Conn, indexChan chan *uint32, filesize int64) {
 	go func() {
 		for {
 			signal, err := bufio.NewReader(tcpConn).ReadString('\n')
 			if err != nil {
 				log.Println(err)
+				if strings.Contains(err.Error(), "use of closed network connection") || err == io.EOF {
+					c.Close()
+					break
+				}
 				continue
 			}
+
+			signal = signal[:len(signal)-1]
 
 			log.Println("Server is asking", signal)
 
 			if strings.HasPrefix(signal, consts.Finished) {
-				log.Println("Finished, so we can cancel context")
-				time.Sleep(time.Second)
-				cancelFunc()
+				log.Println("Finished, cancel context")
+				c.Close()
 				log.Println("Fully cancelled")
 				break
 			}
 
 			if strings.HasPrefix(signal, consts.NeedPacket) {
 				index := extractPacketIndex(signal)
-				indexChan <- &index
+
+				log.Println("User is requesting chunk of index", index)
+
+				totalPacketCount := uint32(filesize / consts.PayloadDataSizeByte)
+				if filesize%consts.PayloadDataSizeByte != 0 {
+					totalPacketCount++
+				}
+
+				for walker := index; walker < totalPacketCount && walker < index+10000; walker++ {
+					log.Println("Push index", walker, "into channel")
+					indexChan <- util.Uint32Ptr(walker)
+				}
 			}
 		}
 	}()
@@ -159,7 +196,7 @@ func feedbackWorker(ctx context.Context, tcpConn net.Conn, indexChan chan *uint3
 		}
 
 		indexChan <- nil
-		fmt.Println("feedbackWorker cancelled")
+		log.Println("feedbackWorker cancelled")
 	}
 }
 
@@ -173,7 +210,7 @@ func extractPacketIndex(msg string) uint32 {
 	return uint32(index)
 }
 
-func readAndEmitWorker(ctx context.Context, file *os.File, udpClient *udp_client.UDPClient, indexChan chan *uint32) {
+func (c *Client) readAndEmitWorker(ctx context.Context, file *os.File, udpClient *udp_client.UDPClient, indexChan chan *uint32) {
 	go func() {
 		for {
 			index := <-indexChan
@@ -187,19 +224,21 @@ func readAndEmitWorker(ctx context.Context, file *os.File, udpClient *udp_client
 			offset := indexVal * consts.PayloadDataSizeByte
 			log.Println("file read offset", offset)
 			bytesread, err := file.ReadAt(buffer, int64(offset))
-			fmt.Printf("Read index %d, %d bytes\n", indexVal, bytesread)
+			log.Printf("Read index %d, %d bytes\n", indexVal, bytesread)
 			if err != nil {
-				fmt.Println(err)
+				log.Println(err)
 				if err == io.EOF {
 					payload := buildPayLoad(buffer, bytesread, indexVal)
 					err = udpClient.SendAsync(ctx, payload)
+					time.Sleep(time.Millisecond * 100)
+					c.Close()
 					continue
 				}
 			}
 
 			payload := buildPayLoad(buffer, bytesread, indexVal)
 			err = udpClient.SendAsync(ctx, payload)
-			fmt.Printf("Chunk %d of size %d sent\n", indexVal, bytesread)
+			log.Printf("Chunk %d of size %d sent\n", indexVal, bytesread)
 			if err != nil {
 				fmt.Print(err)
 				break
@@ -214,11 +253,11 @@ func readAndEmitWorker(ctx context.Context, file *os.File, udpClient *udp_client
 		}
 
 		indexChan <- nil
-		fmt.Println("readAndEmitWorker cancelled")
+		log.Println("readAndEmitWorker cancelled")
 	}
 }
 
-func singleThreadEmit(ctx context.Context, file *os.File, udpClient *udp_client.UDPClient, filesize int64, tcpConn net.Conn) {
+func (c *Client) singleThreadEmit() {
 	progress := fmt.Sprintf("%s%d", consts.NeedPacket, 0)
 	for strings.HasPrefix(progress, consts.NeedPacket) {
 		strArr := strings.Split(progress, ":")
@@ -229,17 +268,17 @@ func singleThreadEmit(ctx context.Context, file *os.File, udpClient *udp_client.
 		}
 
 		if toggle.SerialRead {
-			serialReadAndEmit(ctx, file, udpClient, uint32(index))
+			serialReadAndEmit(c.ctx, c.file, c.udpClient, uint32(index))
 		} else {
-			skipReadAndEmit(ctx, file, udpClient, uint32(index), filesize)
+			skipReadAndEmit(c.ctx, c.file, c.udpClient, uint32(index), c.fileMeta.Size)
 		}
 
 		// Ask server validate the progress
-		if _, err := tcpConn.Write([]byte("validate")); err != nil {
+		if _, err := c.tcpConn.Write([]byte("validate")); err != nil {
 			log.Fatal(err)
 		}
 
-		progress, err = bufio.NewReader(tcpConn).ReadString('\n')
+		progress, err = bufio.NewReader(c.tcpConn).ReadString('\n')
 		if err != nil {
 			log.Println("Fail to get validation result ", err)
 			progress = fmt.Sprintf("%s%d", consts.NeedPacket, 0)
@@ -253,18 +292,17 @@ func serialReadAndEmit(ctx context.Context, file *os.File, client *udp_client.UD
 	buffer := make([]byte, bufferSize)
 	for {
 		bytesread, err := file.Read(buffer)
-		fmt.Println("Bytes read: ", bytesread)
+		log.Println("Bytes read: ", bytesread)
 		if err != nil {
-			fmt.Println("Finished reading")
-			fmt.Println(err)
+			log.Println("Finished reading")
+			log.Println(err)
 			return
 		}
 
 		encoded := base64.StdEncoding.EncodeToString(buffer[:bytesread])
 		payload := fmt.Sprintf("%d,%s", index, encoded)
 		err = client.SendAsync(ctx, []byte(payload))
-		fmt.Printf("Chunk %d sent", index)
-		fmt.Println()
+		fmt.Printf("Chunk %d sent\n", index)
 		if err != nil {
 			fmt.Print(err)
 		}
@@ -279,13 +317,12 @@ func skipReadAndEmit(ctx context.Context, file *os.File, udpClient *udp_client.U
 		bytesread, err := file.ReadAt(buffer, int64(index)*consts.PayloadDataSizeByte)
 		fmt.Printf("Read index %d, %d bytes\n", index, bytesread)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 
 		payload := buildPayLoad(buffer, bytesread, index)
 		err = udpClient.SendAsync(ctx, payload)
-		fmt.Printf("Chunk %d of size %d sent", index, bytesread)
-		fmt.Println()
+		fmt.Printf("Chunk %d of size %d sent\n", index, bytesread)
 		if err != nil {
 			fmt.Print(err)
 		}
