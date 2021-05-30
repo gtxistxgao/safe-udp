@@ -31,7 +31,7 @@ func (t *TcpConn) SendPort(port string) {
 
 func (t *TcpConn) GetFileInfo() filemeta.FileMeta {
 	log.Println("Waiting for file info")
-	info := t.Wait()
+	info, _ := t.Wait()
 	log.Println("Raw file meta message", info)
 	fileMeta := filemeta.FileMeta{}
 	err := json.Unmarshal([]byte(info), &fileMeta)
@@ -62,17 +62,18 @@ func (t *TcpConn) RequestPacket(index uint32) {
 	}
 }
 
-func (t *TcpConn) Wait() string {
+func (t *TcpConn) Wait() (string, error) {
 	message, err := bufio.NewReader(t.conn).ReadString('\n')
 	if err != nil {
 		log.Println(err)
+		return err.Error(), err
 	}
 
 	if len(message) == 0 {
-		return message
+		return message, nil
 	}
 
-	return message[:len(message)-1]
+	return message[:len(message)-1], nil
 }
 
 func (t *TcpConn) GetLocalInfo() string {

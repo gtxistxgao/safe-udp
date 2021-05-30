@@ -15,12 +15,14 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type User struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
+	userInfo  string
 	tcpConn   *tcpconn.TcpConn
 	udpServer *udp_server.UDPServer
 	fileInfo  filemeta.FileMeta
@@ -39,6 +41,7 @@ func New(tcpConn net.Conn) *User {
 	return &User{
 		ctx:       ctx,
 		cancel:    cancel,
+		userInfo:  tcpConn.LocalAddr().String(),
 		udpServer: server,
 		tcpConn:   tcpconn.New(tcpConn),
 		progress:  0, // TODO: recording last time and support resuming
@@ -58,7 +61,7 @@ func (u *User) Start() {
 	processedData := make(chan *model.Chunk, rawDataBufferCountLimit)
 	defer close(processedData)
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < consts.RawDataWorkerNumber; i++ {
 		go u.rawDataProcessWorker(u.ctx, rawData, processedData)
 		log.Println(i, " rawDataProcessWorker started")
 	}
@@ -84,8 +87,10 @@ func (u *User) Start() {
 
 	select {
 	case <-u.ctx.Done():
-		fmt.Printf("User %s finished task\n", u.tcpConn.GetLocalInfo())
+		fmt.Printf("User %s finished task\n", u.userInfo)
 	}
+
+	fmt.Printf("User %s finished task\n", u.userInfo)
 }
 
 func (u *User) sync() {
@@ -97,7 +102,14 @@ func (u *User) sync() {
 				break
 			}
 
-			message := u.tcpConn.Wait()
+			message, err := u.tcpConn.Wait()
+			if err != nil {
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					log.Printf("Connection closed. Stop sync")
+					break
+				}
+			}
+
 			log.Printf("Message received from User %s\n", message)
 			u.triage(message)
 			signal <- util.BoolPtr(true)

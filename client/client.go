@@ -24,6 +24,7 @@ var cancelFunc context.CancelFunc
 func main() {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	cancelFunc = cancel
 
 	fmt.Println("Start to open file")

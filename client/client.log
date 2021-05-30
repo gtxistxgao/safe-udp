@@ -4,6 +4,6 @@ Read index 0, 32 bytes
 EOF
 packet-written: bytes=46
 feedbackWorker cancelled
-full cycle done cancelled
-Finished. cost  1.007382438s
 readAndEmitWorker cancelled
+full cycle done cancelled
+Finished. cost  1.013303564s

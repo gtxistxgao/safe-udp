@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/gtxistxgao/safe-udp/server/controller"
+	"log"
 )
 
 /*
@@ -30,6 +31,7 @@ channel 2: processed received package into object
 func main() {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	defer cancel()
 
 	c := controller.New(ctx, "8888")

@@ -1,33 +1,16 @@
-Start to listen to:  [::]:64070
-packet-received: bytes=46 from=127.0.0.1:54604
+Start to listen to:  [::]:61752
+packet-received: bytes=46 from=127.0.0.1:60462
 Got raw data with size:  46
 pushed data chunk 0 into min heap
 Got signal! Check the current heap top! 
-rawDataProcessWorker cancelled
-rawDataProcessWorker cancelled
-rawDataProcessWorker cancelled
-Got raw data with size:  0
-rawDataProcessWorker cancelled
-Got raw data with size:  0
-rawDataProcessWorker cancelled
 saveToDiskWorker cancelled
-Got raw data with size:  0
-udp_server run done context canceled
-rawDataProcessWorker cancelled
 minHeapPollWorker routine finished
-rawDataProcessWorker cancelled
-Got raw data with size:  0
-minHeapPollWorker cancelled
-minHeapPushWorker cancelled
-Got raw data with size:  0
-rawDataProcessWorker cancelled
+User 127.0.0.1:8888 finished task
+User 127.0.0.1:8888 finished task
+minHeapPollWorker routine finished
 Got raw data with size:  0
 minHeapPushWorker routine finished
-Got raw data with size:  0
-Got raw data with size:  0
+minHeapPollWorker cancelled
 rawDataProcessWorker cancelled
-minHeapPollWorker routine finished
-Got raw data with size:  0
-rawDataProcessWorker cancelled
-User 127.0.0.1:8888 finished task
-Got raw data with size:  0
+minHeapPushWorker cancelled
+udp_server run done context canceled
