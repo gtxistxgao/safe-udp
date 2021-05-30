@@ -138,8 +138,9 @@ func feedbackWorker(ctx context.Context, tcpConn net.Conn, indexChan chan *uint3
 
 			if strings.HasPrefix(signal, consts.Finished) {
 				log.Println("Finished, so we can cancel context")
-				//time.Sleep(time.Second)
+				time.Sleep(time.Second)
 				cancelFunc()
+				log.Println("Fully cancelled")
 				break
 			}
 

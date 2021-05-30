@@ -27,7 +27,7 @@ type User struct {
 	progress  uint32 // progress donate the next packet index we are expecting
 }
 
-func New(conn net.Conn) *User {
+func New(tcpConn net.Conn) *User {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -40,7 +40,7 @@ func New(conn net.Conn) *User {
 		ctx:       ctx,
 		cancel:    cancel,
 		udpServer: server,
-		tcpConn:   tcpconn.New(conn),
+		tcpConn:   tcpconn.New(tcpConn),
 		progress:  0, // TODO: recording last time and support resuming
 	}
 }
@@ -89,16 +89,30 @@ func (u *User) Start() {
 }
 
 func (u *User) sync() {
+	signal := make(chan *bool, 1)
 	go func() {
 		for {
+			sig := <-signal
+			if sig == nil {
+				break
+			}
+
 			message := u.tcpConn.Wait()
 			log.Printf("Message received from User %s\n", message)
 			u.triage(message)
+			signal <- util.BoolPtr(true)
 		}
 	}()
 
+	signal <- util.BoolPtr(true)
+
 	select {
 	case <-u.ctx.Done():
+		for len(signal) > 0 {
+			<-signal
+		}
+
+		signal <- nil
 		log.Println("sync finished")
 	}
 }
@@ -165,8 +179,8 @@ func (u *User) serverWorker(ctx context.Context, rawData chan []byte) {
 }
 
 func (u *User) Close() {
-	u.cancel()
 	u.tcpConn.Close()
+	u.cancel()
 }
 
 func (u *User) rawDataProcessWorker(ctx context.Context, rawData chan []byte, processedData chan *model.Chunk) {
@@ -319,7 +333,6 @@ func (u *User) saveToDiskWorker(ctx context.Context, dataToBeWritten chan *model
 				log.Printf("Write %d bytes data into disk\n", n)
 
 			}
-
 		}
 	}(dataToBeWritten)
 

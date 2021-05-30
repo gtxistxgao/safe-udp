@@ -83,8 +83,8 @@ func (s *UDPServer) Run(ctx context.Context, rawData chan []byte) error {
 
 	select {
 	case <-ctx.Done():
-		fmt.Println("cancelled")
-		return ctx.Err()
+		fmt.Println("udp_server run done", ctx.Err())
+		return nil
 	case err := <-doneChan:
 		if err != nil {
 			fmt.Println(err)
