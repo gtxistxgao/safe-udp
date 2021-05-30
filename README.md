@@ -55,88 +55,32 @@ The process works as follow:
         - Told client all packets received
         - Env clean up like cancel context
 
-# Server log
-
-```
-╰─ go run server.go                                                                                                                                                                                                                                 ─╯
-Start to listen to:  [::]:58001
-2021/05/30 14:11:18 controller.go:67: New user joined
-2021/05/30 14:11:18 controller.go:90: User started
-2021/05/30 14:11:18 udp_server.go:41: Get local address [::]:58001
-2021/05/30 14:11:18 user.go:179: Tell client we are listening to this port 58001
-2021/05/30 14:11:18 tcpconn.go:29: Told user the UCP port is 58001
-2021/05/30 14:11:18 tcpconn.go:34: Waiting for file info
-2021/05/30 14:11:18 tcpconn.go:36: Raw file meta message {"name":"small.txt","size":32}
-2021/05/30 14:11:18 user.go:184: Got file info File name: small.txt. File size 32
-2021/05/30 14:11:18 user.go:66: 0  rawDataProcessWorker started
-2021/05/30 14:11:18 user.go:75: minHeapPushWorker started
-2021/05/30 14:11:18 user.go:79: minHeapPollWorker started
-2021/05/30 14:11:18 user.go:82: saveToDiskWorker started
-2021/05/30 14:11:18 tcpconn.go:29: Told user the UCP port is Server prepare ready
-
-2021/05/30 14:11:18 user.go:113: Message received from User validate
-2021/05/30 14:11:18 user.go:138: User finished send all package. we need to do validation
-2021/05/30 14:11:18 tcpconn.go:62: Told user to send the packet 0 again. Msg: NeedPacket:0
-packet-received: bytes=46 from=127.0.0.1:58317
-Got raw data with size:  46
-2021/05/30 14:11:18 user.go:230: Successfully processed data chunk 0 and pushed into processedDataQueue.
-pushed data chunk 0 into min heap
-Got signal! Check the current heap top! 
-2021/05/30 14:11:18 user.go:345: Write Chunk 0, 32 bytes data into disk
-2021/05/30 14:11:18 tcpconn.go:69: EOF
-2021/05/30 14:11:18 user.go:113: Message received from User EOF
-2021/05/30 14:11:18 user.go:142: All Validation is done. Cleaning up
-2021/05/30 14:11:18 tcpconn.go:69: read tcp 127.0.0.1:8888->127.0.0.1:54924: use of closed network connection
-2021/05/30 14:11:18 user.go:108: Connection closed. Stop sync
-udp_server run done context canceled
-User 127.0.0.1:8888 finished task
-minHeapPushWorker cancelled
-minHeapPushWorker routine finished
-minHeapPollWorker cancelled
-rawDataProcessWorker cancelled
-Got raw data with size:  0
-minHeapPollWorker routine finished
-saveToDiskWorker cancelled
-minHeapPollWorker routine finished
-2021/05/30 14:11:18 user.go:128: sync finished
-
-```
-
 # Client log
 
 ```
-╰─ go run client.go                                                                                        ─╯
-2021/05/30 14:11:18 client.go:49: Start to dial server
-2021/05/30 14:11:18 client.go:342: Got UDP port 58001
-2021/05/30 14:11:18 client.go:62: UDP buffer value is: 9216
-2021/05/30 14:11:18 client.go:65: Start to open file
-2021/05/30 14:11:18 client.go:85: Send file info {"name":"small.txt","size":32}
-2021/05/30 14:11:18 client.go:92: Server prepare ready
-
-2021/05/30 14:11:18 client.go:126: indexChan limit 1
-2021/05/30 14:11:18 client.go:129: readAndEmitWorker started.
-2021/05/30 14:11:18 client.go:131: feedbackWorker started.
-2021/05/30 14:11:18 client.go:146: Asked server to validate 9 bytes
-2021/05/30 14:11:18 client.go:165: Server is asking NeedPacket:0
-2021/05/30 14:11:18 client.go:177: User is requesting chunk of index 0
-2021/05/30 14:11:18 client.go:185: Push index 0 into channel
-2021/05/30 14:11:18 client.go:222: start to read chunk with index 0
-2021/05/30 14:11:18 client.go:225: file read offset 0
-2021/05/30 14:11:18 client.go:227: Read index 0, 32 bytes
-2021/05/30 14:11:18 client.go:229: EOF
-2021/05/30 14:11:18 udp_client.go:79: packet-written: bytes=46
-2021/05/30 14:11:18 client.go:105: Start to close client
-2021/05/30 14:11:18 client.go:155: read tcp 127.0.0.1:54924->127.0.0.1:8888: use of closed network connection
-2021/05/30 14:11:18 client.go:105: Start to close client
-2021/05/30 14:11:18 client.go:107: TCP Connection closed
-2021/05/30 14:11:18 client.go:109: UDP Connection closed
-2021/05/30 14:11:18 client.go:107: TCP Connection closed
-2021/05/30 14:11:18 client.go:111: File reader closed
-2021/05/30 14:11:18 client.go:109: UDP Connection closed
-2021/05/30 14:11:18 client.go:113: Context closed
-2021/05/30 14:11:18 client.go:111: File reader closed
-2021/05/30 14:11:18 client.go:113: Context closed
-2021/05/30 14:11:18 client.go:137: full cycle done cancelled
-2021/05/30 14:11:18 client.go:256: readAndEmitWorker cancelled
-2021/05/30 14:11:18 client.go:35: Finished. cost  112.484038ms
+...
+2021/05/30 16:21:45 client.go:206: Read index 14835 with offset 22252500.
+Read offset 22252500, 1500 bytes
+2021/05/30 16:21:45 client.go:166: Asking server do validation
+2021/05/30 16:21:45 udp_client.go:78: packet-written: bytes=2006
+2021/05/30 16:21:45 tcpconn.go:40: Asked server to validate
+2021/05/30 16:21:45 client.go:210: Chunk 14835 of size 1500 sent
+2021/05/30 16:21:45 client.go:204: start to read chunk 14836/14836
+2021/05/30 16:21:45 client.go:206: Read index 14836 with offset 22254000.
+Read offset 22254000, 526 bytes
+2021/05/30 16:21:45 reader.go:53: EOF
+2021/05/30 16:21:45 udp_client.go:78: packet-written: bytes=710
+2021/05/30 16:21:45 client.go:210: Chunk 14836 of size 526 sent
+2021/05/30 16:21:45 client.go:146: Server is asking Finished
+2021/05/30 16:21:45 client.go:149: Finished, cancel context
+2021/05/30 16:21:45 client.go:95: Start to close client
+2021/05/30 16:21:45 client.go:97: TCP Connection closed
+2021/05/30 16:21:45 client.go:99: UDP Connection closed
+2021/05/30 16:21:45 client.go:101: File reader closed
+2021/05/30 16:21:45 client.go:103: Context closed
+2021/05/30 16:21:45 client.go:151: Fully cancelled
+2021/05/30 16:21:45 client.go:181: feedbackWorker cancelled
+2021/05/30 16:21:45 client.go:225: readAndEmitWorker cancelled
+2021/05/30 16:21:45 client.go:129: full cycle done cancelled
+2021/05/30 16:21:45 client.go:36: File info File name: book.pdf. File size 22254526. Total packet count 14837
 ```
