@@ -86,6 +86,7 @@ func (u *User) Start() {
 		fmt.Printf("User %s finished task\n", u.userInfo)
 	}
 
+	// sleep 1 sec to cancel all go routines
 	time.Sleep(time.Second)
 }
 
@@ -155,7 +156,6 @@ func (u *User) validate() {
 		log.Printf("All required %d packets received\n", u.progress)
 		// we can clean up  resources
 		u.tcpConn.SendFinishSignal()
-		time.Sleep(time.Second)
 		u.Close()
 	} else {
 		// hay we are not finished yet. send me this packet again!

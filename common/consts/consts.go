@@ -5,4 +5,4 @@ const PayloadDataSizeByte = 1500
 const MaxChunkSize = 3000
 const MaxUserLimit = 1
 const RawDataWorkerNumber = 1
-const PacketCountPerRound = 100000
+const PacketCountPerRound = 1000000

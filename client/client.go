@@ -33,8 +33,11 @@ func main() {
 	c.Run()
 
 	elapsed := time.Since(start)
-	log.Println("File info", c.GetFileMeta())
 	log.Println("File sent. cost", elapsed)
+	fileMeta := c.GetFileMeta()
+	log.Println("File info", fileMeta.String())
+	log.Printf("Speed: %f Kb/s\n", float64(fileMeta.Size)/1024/elapsed.Seconds())
+	log.Printf("Speed: %f Mb/s\n", float64(fileMeta.Size)/1024/1024/elapsed.Seconds())
 }
 
 type Client struct {
@@ -87,8 +90,8 @@ func NewClient(ctx context.Context, cancel context.CancelFunc) *Client {
 	}
 }
 
-func (c *Client) GetFileMeta() string {
-	return c.fileReader.FileMeta.String()
+func (c *Client) GetFileMeta() fileoperator.FileMeta {
+	return c.fileReader.FileMeta
 }
 
 func (c *Client) Close() {

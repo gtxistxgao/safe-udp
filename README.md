@@ -59,28 +59,10 @@ The process works as follow:
 
 ```
 ...
-2021/05/30 16:21:45 client.go:206: Read index 14835 with offset 22252500.
-Read offset 22252500, 1500 bytes
-2021/05/30 16:21:45 client.go:166: Asking server do validation
-2021/05/30 16:21:45 udp_client.go:78: packet-written: bytes=2006
-2021/05/30 16:21:45 tcpconn.go:40: Asked server to validate
-2021/05/30 16:21:45 client.go:210: Chunk 14835 of size 1500 sent
-2021/05/30 16:21:45 client.go:204: start to read chunk 14836/14836
-2021/05/30 16:21:45 client.go:206: Read index 14836 with offset 22254000.
-Read offset 22254000, 526 bytes
-2021/05/30 16:21:45 reader.go:53: EOF
-2021/05/30 16:21:45 udp_client.go:78: packet-written: bytes=710
-2021/05/30 16:21:45 client.go:210: Chunk 14836 of size 526 sent
-2021/05/30 16:21:45 client.go:146: Server is asking Finished
-2021/05/30 16:21:45 client.go:149: Finished, cancel context
-2021/05/30 16:21:45 client.go:95: Start to close client
-2021/05/30 16:21:45 client.go:97: TCP Connection closed
-2021/05/30 16:21:45 client.go:99: UDP Connection closed
-2021/05/30 16:21:45 client.go:101: File reader closed
-2021/05/30 16:21:45 client.go:103: Context closed
-2021/05/30 16:21:45 client.go:151: Fully cancelled
-2021/05/30 16:21:45 client.go:181: feedbackWorker cancelled
-2021/05/30 16:21:45 client.go:225: readAndEmitWorker cancelled
-2021/05/30 16:21:45 client.go:129: full cycle done cancelled
-2021/05/30 16:21:45 client.go:36: File info File name: book.pdf. File size 22254526. Total packet count 14837
+2021/05/30 16:45:50 client.go:36: File sent. cost 5.654177829s
+2021/05/30 16:45:50 client.go:38: File info File name: book.pdf. File size 22254526. Total packet count 14837
+2021/05/30 16:45:50 client.go:184: feedbackWorker cancelled
+2021/05/30 16:45:50 client.go:39: Speed: 3843.695088 Kb/s
+2021/05/30 16:45:50 client.go:228: readAndEmitWorker cancelled
+2021/05/30 16:45:50 client.go:40: Speed: 3.753608 Mb/s
 ```
