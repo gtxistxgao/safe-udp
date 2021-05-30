@@ -36,6 +36,12 @@ func New(address string, maxBufferSize int) (*UDPServer, error) {
 	}, nil
 }
 
+func (s *UDPServer) LocalAddr() string {
+	addr := s.packetConn.LocalAddr().String()
+	log.Println("Get local address", addr)
+	return addr
+}
+
 func (s *UDPServer) GetPort() string {
 	addr := s.packetConn.LocalAddr().String()
 	log.Println("Get local address", addr)

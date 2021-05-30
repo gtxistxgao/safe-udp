@@ -6,8 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/gtxistxgao/safe-udp/client/tcpconn"
 	"github.com/gtxistxgao/safe-udp/common/consts"
-	"github.com/gtxistxgao/safe-udp/common/filemeta"
+	"github.com/gtxistxgao/safe-udp/common/fileoperator"
 	"github.com/gtxistxgao/safe-udp/common/toggle"
 	"github.com/gtxistxgao/safe-udp/common/udp_client"
 	"github.com/gtxistxgao/safe-udp/common/util"
@@ -20,7 +21,7 @@ import (
 	"time"
 )
 
-var fileName string = "small.txt"
+var fileName string = "book.pdf"
 
 func main() {
 	ctx := context.Background()
@@ -32,16 +33,16 @@ func main() {
 	c.Run()
 
 	elapsed := time.Since(start)
-	log.Println("Finished. cost ", elapsed)
+	log.Println("File info", c.GetFileMeta())
+	log.Println("File sent. cost", elapsed)
 }
 
 type Client struct {
-	ctx       context.Context
-	tcpConn   net.Conn
-	cancel    context.CancelFunc
-	file      *os.File
-	fileMeta  filemeta.FileMeta
-	udpClient *udp_client.UDPClient
+	ctx        context.Context
+	tcpConn    *tcpconn.TcpConn
+	cancel     context.CancelFunc
+	fileReader *fileoperator.Reader
+	udpClient  *udp_client.UDPClient
 }
 
 func NewClient(ctx context.Context, cancel context.CancelFunc) *Client {
@@ -58,27 +59,13 @@ func NewClient(ctx context.Context, cancel context.CancelFunc) *Client {
 		log.Fatal("Fail to send file meta data, error:", err)
 	}
 
-	udpClient := udp_client.New(ctx, "localhost:"+udpPort, 500, time.Second*2)
+	udpClient := udp_client.New(ctx, "localhost:"+udpPort, time.Second*2)
 	log.Println("UDP buffer value is:", udpClient.GetBufferValue())
 
 	// 3. exchange File metadata
-	log.Println("Start to open file")
-	file, err := os.Open(fileName)
-	if err != nil {
-		log.Fatal(err)
-	}
+	fileReader := fileoperator.NewReader(fileName)
 
-	fileinfo, err := file.Stat()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fileMetaObject := filemeta.FileMeta{
-		Name: fileinfo.Name(),
-		Size: fileinfo.Size(),
-	}
-
-	fileMeta, err := json.Marshal(&fileMetaObject)
+	fileMeta, err := json.Marshal(&fileReader.FileMeta)
 	if err != nil {
 		log.Fatal("Fail to parse file meta data, error:", err)
 	}
@@ -92,13 +79,16 @@ func NewClient(ctx context.Context, cancel context.CancelFunc) *Client {
 	log.Println(ACK)
 
 	return &Client{
-		ctx:       ctx,
-		tcpConn:   tcpConn,
-		cancel:    cancel,
-		file:      file,
-		fileMeta:  fileMetaObject,
-		udpClient: udpClient,
+		ctx:        ctx,
+		tcpConn:    tcpconn.New(tcpConn),
+		cancel:     cancel,
+		fileReader: fileReader,
+		udpClient:  udpClient,
 	}
+}
+
+func (c *Client) GetFileMeta() string {
+	return c.fileReader.FileMeta.String()
 }
 
 func (c *Client) Close() {
@@ -107,7 +97,7 @@ func (c *Client) Close() {
 	log.Println("TCP Connection closed")
 	c.udpClient.Close()
 	log.Println("UDP Connection closed")
-	c.file.Close()
+	c.fileReader.Close()
 	log.Println("File reader closed")
 	c.cancel()
 	log.Println("Context closed")
@@ -125,12 +115,14 @@ func (c *Client) multiThreadEmit() {
 	indexChan := make(chan *uint32, 1)
 	log.Println("indexChan limit", 1)
 
-	go c.readAndEmitWorker(c.ctx, c.file, c.udpClient, indexChan)
+	go c.readAndEmitWorker(indexChan)
 	log.Println("readAndEmitWorker started.")
-	go c.feedbackWorker(c.ctx, c.tcpConn, indexChan, c.fileMeta.Size)
+	go c.feedbackWorker(indexChan)
 	log.Println("feedbackWorker started.")
 
-	c.askServerDoValidation(c.tcpConn)
+	if err := c.tcpConn.RequestValidation(); err != nil {
+		log.Println("RequestValidation failed. ", err)
+	}
 
 	select {
 	case <-c.ctx.Done():
@@ -138,19 +130,10 @@ func (c *Client) multiThreadEmit() {
 	}
 }
 
-func (c *Client) askServerDoValidation(tcpConn net.Conn) {
-	n, err := tcpConn.Write([]byte(consts.Validate + "\n"))
-	if err != nil {
-		log.Println("Fail to ask server to validate", err)
-	} else {
-		log.Println("Asked server to validate", n, "bytes")
-	}
-}
-
-func (c *Client) feedbackWorker(ctx context.Context, tcpConn net.Conn, indexChan chan *uint32, filesize int64) {
+func (c *Client) feedbackWorker(indexChan chan *uint32) {
 	go func() {
 		for {
-			signal, err := bufio.NewReader(tcpConn).ReadString('\n')
+			signal, err := c.tcpConn.Wait()
 			if err != nil {
 				log.Println(err)
 				if strings.Contains(err.Error(), "use of closed network connection") || err == io.EOF {
@@ -159,8 +142,6 @@ func (c *Client) feedbackWorker(ctx context.Context, tcpConn net.Conn, indexChan
 				}
 				continue
 			}
-
-			signal = signal[:len(signal)-1]
 
 			log.Println("Server is asking", signal)
 
@@ -174,23 +155,24 @@ func (c *Client) feedbackWorker(ctx context.Context, tcpConn net.Conn, indexChan
 			if strings.HasPrefix(signal, consts.NeedPacket) {
 				index := extractPacketIndex(signal)
 
-				log.Println("User is requesting chunk of index", index)
+				log.Printf("User is requesting chunk of %d/%d", index, c.fileReader.FileMeta.TotalPacketCount-1)
 
-				totalPacketCount := uint32(filesize / consts.PayloadDataSizeByte)
-				if filesize%consts.PayloadDataSizeByte != 0 {
-					totalPacketCount++
-				}
-
-				for walker := index; walker < totalPacketCount && walker < index+10000; walker++ {
+				for walker := index; walker < c.fileReader.FileMeta.TotalPacketCount && walker < index+consts.PacketCountPerRound; walker++ {
 					log.Println("Push index", walker, "into channel")
 					indexChan <- util.Uint32Ptr(walker)
+					//time.Sleep(time.Microsecond)
+				}
+
+				log.Println("Asking server do validation")
+				if err := c.tcpConn.RequestValidation(); err != nil {
+					log.Println("RequestValidation failed. ", err)
 				}
 			}
 		}
 	}()
 
 	select {
-	case <-ctx.Done():
+	case <-c.ctx.Done():
 		for len(indexChan) > 0 {
 			<-indexChan
 		}
@@ -210,7 +192,7 @@ func extractPacketIndex(msg string) uint32 {
 	return uint32(index)
 }
 
-func (c *Client) readAndEmitWorker(ctx context.Context, file *os.File, udpClient *udp_client.UDPClient, indexChan chan *uint32) {
+func (c *Client) readAndEmitWorker(indexChan chan *uint32) {
 	go func() {
 		for {
 			index := <-indexChan
@@ -219,26 +201,13 @@ func (c *Client) readAndEmitWorker(ctx context.Context, file *os.File, udpClient
 			}
 
 			indexVal := *index
-			log.Println("start to read chunk with index", indexVal)
-			buffer := make([]byte, consts.PayloadDataSizeByte)
+			log.Printf("start to read chunk %d/%d\n", indexVal, c.fileReader.FileMeta.TotalPacketCount-1)
 			offset := indexVal * consts.PayloadDataSizeByte
-			log.Println("file read offset", offset)
-			bytesread, err := file.ReadAt(buffer, int64(offset))
-			log.Printf("Read index %d, %d bytes\n", indexVal, bytesread)
-			if err != nil {
-				log.Println(err)
-				if err == io.EOF {
-					payload := buildPayLoad(buffer, bytesread, indexVal)
-					err = udpClient.SendAsync(ctx, payload)
-					time.Sleep(time.Millisecond * 100)
-					c.Close()
-					continue
-				}
-			}
-
-			payload := buildPayLoad(buffer, bytesread, indexVal)
-			err = udpClient.SendAsync(ctx, payload)
-			log.Printf("Chunk %d of size %d sent\n", indexVal, bytesread)
+			log.Printf("Read index %d with offset %d.\n", indexVal, offset)
+			bytesread := c.fileReader.ReadAt(int64(offset))
+			payload := buildPayLoad(bytesread, indexVal)
+			err := c.udpClient.SendAsync(c.ctx, payload)
+			log.Printf("Chunk %d of size %d sent\n", indexVal, len(bytesread))
 			if err != nil {
 				fmt.Print(err)
 				break
@@ -247,7 +216,7 @@ func (c *Client) readAndEmitWorker(ctx context.Context, file *os.File, udpClient
 	}()
 
 	select {
-	case <-ctx.Done():
+	case <-c.ctx.Done():
 		for len(indexChan) > 0 {
 			<-indexChan
 		}
@@ -268,17 +237,17 @@ func (c *Client) singleThreadEmit() {
 		}
 
 		if toggle.SerialRead {
-			serialReadAndEmit(c.ctx, c.file, c.udpClient, uint32(index))
+			serialReadAndEmit(c.ctx, c.fileReader.File, c.udpClient, uint32(index))
 		} else {
-			skipReadAndEmit(c.ctx, c.file, c.udpClient, uint32(index), c.fileMeta.Size)
+			c.skipReadAndEmit(c.ctx, c.udpClient, uint32(index), c.fileReader.FileMeta.Size)
 		}
 
-		// Ask server validate the progress
-		if _, err := c.tcpConn.Write([]byte("validate")); err != nil {
-			log.Fatal(err)
+		log.Println("Asking server do validation")
+		if err := c.tcpConn.RequestValidation(); err != nil {
+			log.Println("RequestValidation failed. ", err)
 		}
 
-		progress, err = bufio.NewReader(c.tcpConn).ReadString('\n')
+		progress, err = c.tcpConn.Wait()
 		if err != nil {
 			log.Println("Fail to get validation result ", err)
 			progress = fmt.Sprintf("%s%d", consts.NeedPacket, 0)
@@ -311,18 +280,12 @@ func serialReadAndEmit(ctx context.Context, file *os.File, client *udp_client.UD
 	}
 }
 
-func skipReadAndEmit(ctx context.Context, file *os.File, udpClient *udp_client.UDPClient, index uint32, filesize int64) {
-	buffer := make([]byte, consts.PayloadDataSizeByte)
+func (c *Client) skipReadAndEmit(ctx context.Context, udpClient *udp_client.UDPClient, index uint32, filesize int64) {
 	for ; int64(index) < filesize; index++ {
-		bytesread, err := file.ReadAt(buffer, int64(index)*consts.PayloadDataSizeByte)
-		fmt.Printf("Read index %d, %d bytes\n", index, bytesread)
-		if err != nil {
-			log.Println(err)
-		}
-
-		payload := buildPayLoad(buffer, bytesread, index)
-		err = udpClient.SendAsync(ctx, payload)
-		fmt.Printf("Chunk %d of size %d sent\n", index, bytesread)
+		bytesread := c.fileReader.ReadAt(int64(index) * consts.PayloadDataSizeByte)
+		payload := buildPayLoad(bytesread, index)
+		err := udpClient.SendAsync(ctx, payload)
+		log.Printf("Chunk %d of size %d sent\n", index, bytesread)
 		if err != nil {
 			fmt.Print(err)
 		}
@@ -343,8 +306,8 @@ func getUcpDstPort(tcpConn net.Conn) (string, error) {
 	return udpPort[:len(udpPort)-1], nil
 }
 
-func buildPayLoad(buffer []byte, bytesread int, index uint32) []byte {
-	encoded := base64.StdEncoding.EncodeToString(buffer[:bytesread])
+func buildPayLoad(chunk []byte, index uint32) []byte {
+	encoded := base64.StdEncoding.EncodeToString(chunk)
 	payload := fmt.Sprintf("%d,%s", index, encoded)
 	return []byte(payload)
 }

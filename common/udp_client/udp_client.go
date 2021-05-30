@@ -3,6 +3,7 @@ package udp_client
 import (
 	"context"
 	"fmt"
+	"github.com/gtxistxgao/safe-udp/common/consts"
 	"log"
 	"net"
 	"syscall"
@@ -11,11 +12,10 @@ import (
 
 type UDPClient struct {
 	conn         *net.UDPConn
-	maxChunkSize int
 	timeoutLimit time.Duration
 }
 
-func New(ctx context.Context, address string, maxChunkSize int, timeoutLimit time.Duration) *UDPClient {
+func New(ctx context.Context, address string, timeoutLimit time.Duration) *UDPClient {
 	// Resolve the UDP address so that we can make use of DialUDP
 	// with an actual IP and port instead of a name (in case a
 	// hostname is specified).
@@ -38,7 +38,6 @@ func New(ctx context.Context, address string, maxChunkSize int, timeoutLimit tim
 
 	return &UDPClient{
 		conn:         conn,
-		maxChunkSize: maxChunkSize,
 		timeoutLimit: timeoutLimit,
 	}
 }
@@ -60,8 +59,8 @@ func (c *UDPClient) GetBufferValue() int {
 }
 
 func (c *UDPClient) SendAsync(ctx context.Context, chunk []byte) error {
-	if len(chunk) > c.maxChunkSize {
-		return fmt.Errorf("chunk size %d exceeded the max chunk size limit %d", len(chunk), c.maxChunkSize)
+	if len(chunk) > consts.MaxChunkSize {
+		return fmt.Errorf("chunk size %d exceeded the max chunk size limit %d", len(chunk), consts.MaxChunkSize)
 	}
 
 	doneChan := make(chan error, 1)

@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/gtxistxgao/safe-udp/common/consts"
-	"github.com/gtxistxgao/safe-udp/common/filemeta"
+	"github.com/gtxistxgao/safe-udp/common/fileoperator"
 	"github.com/gtxistxgao/safe-udp/common/model"
 	"github.com/gtxistxgao/safe-udp/common/udp_server"
 	"github.com/gtxistxgao/safe-udp/common/util"
@@ -25,7 +25,7 @@ type User struct {
 	userInfo  string
 	tcpConn   *tcpconn.TcpConn
 	udpServer *udp_server.UDPServer
-	fileInfo  filemeta.FileMeta
+	fileInfo  fileoperator.FileMeta
 	progress  uint32 // progress donate the next packet index we are expecting
 }
 
@@ -41,7 +41,7 @@ func New(tcpConn net.Conn) *User {
 	return &User{
 		ctx:       ctx,
 		cancel:    cancel,
-		userInfo:  tcpConn.LocalAddr().String(),
+		userInfo:  server.LocalAddr(),
 		udpServer: server,
 		tcpConn:   tcpconn.New(tcpConn),
 		progress:  0, // TODO: recording last time and support resuming
@@ -50,6 +50,10 @@ func New(tcpConn net.Conn) *User {
 
 func (u *User) Start() {
 	rawDataBufferCountLimit := (consts.MaxMemoryBufferMB * (1 << 20)) / consts.PayloadDataSizeByte
+	if rawDataBufferCountLimit > consts.PacketCountPerRound {
+		rawDataBufferCountLimit = consts.PacketCountPerRound
+	}
+
 	rawData := make(chan []byte, rawDataBufferCountLimit)
 	defer close(rawData)
 
@@ -66,17 +70,9 @@ func (u *User) Start() {
 		log.Println(i, " rawDataProcessWorker started")
 	}
 
-	minHeapChunk := &model.MinHeapChunk{}
-	heap.Init(minHeapChunk)
-
-	signal := make(chan *bool, rawDataBufferCountLimit)
-
-	go u.minHeapPushWorker(u.ctx, minHeapChunk, processedData, signal)
-	log.Println("minHeapPushWorker started")
-
 	dataToBeWritten := make(chan *model.Chunk, 1)
-	go u.minHeapPollWorker(u.ctx, minHeapChunk, signal, dataToBeWritten)
-	log.Println("minHeapPollWorker started")
+	go u.minHeapWorker(u.ctx, processedData, dataToBeWritten)
+	log.Println("minHeapWorker started")
 
 	go u.saveToDiskWorker(u.ctx, dataToBeWritten, u.fileInfo.Name)
 	log.Println("saveToDiskWorker started")
@@ -154,19 +150,13 @@ func (u *User) beat() {
 }
 
 func (u *User) validate() {
-	totalPacketCount := uint32(u.fileInfo.Size / consts.PayloadDataSizeByte)
-	if u.fileInfo.Size%consts.PayloadDataSizeByte != 0 {
-		totalPacketCount++
-	}
-
-	finished := u.progress == totalPacketCount
+	finished := u.progress == u.fileInfo.TotalPacketCount
 	if finished {
 		log.Printf("All required %d packets received\n", u.progress)
 		// we can clean up  resources
 		u.tcpConn.SendFinishSignal()
 		time.Sleep(time.Second)
 		u.Close()
-
 	} else {
 		// hay we are not finished yet. send me this packet again!
 		u.tcpConn.RequestPacket(u.progress)
@@ -244,8 +234,12 @@ func (u *User) rawDataProcessWorker(ctx context.Context, rawData chan []byte, pr
 	}
 }
 
-func (u *User) minHeapPushWorker(ctx context.Context, minHeapChunk *model.MinHeapChunk, processedData chan *model.Chunk, signal chan *bool) {
-	go func(min *model.MinHeapChunk, signal chan *bool) {
+func (u *User) minHeapWorker(ctx context.Context, processedData chan *model.Chunk, dataToBeWritten chan *model.Chunk) {
+
+	go func() {
+		minHeapChunk := &model.MinHeapChunk{}
+		heap.Init(minHeapChunk)
+
 		for {
 			c := <-processedData
 			if c == nil {
@@ -253,36 +247,11 @@ func (u *User) minHeapPushWorker(ctx context.Context, minHeapChunk *model.MinHea
 				break
 			}
 
-			heap.Push(min, *c)
+			heap.Push(minHeapChunk, *c)
 			fmt.Printf("pushed data chunk %d into min heap\n", c.Index)
-			signal <- util.BoolPtr(true)
-		}
-	}(minHeapChunk, signal)
 
-	select {
-	case <-ctx.Done():
-		for len(processedData) > 0 {
-			<-processedData
-		}
-
-		processedData <- nil
-		fmt.Println("minHeapPushWorker cancelled")
-	}
-}
-
-func (u *User) minHeapPollWorker(ctx context.Context, minHeapChunk *model.MinHeapChunk, signal chan *bool, dataToBeWritten chan *model.Chunk) {
-	go func(dataToBeWritten chan *model.Chunk) {
-		for {
-			s := <-signal
-			if s == nil {
-				fmt.Println("minHeapPollWorker routine finished")
-				break
-			}
-
-			fmt.Println("Got signal! Check the current heap top! ")
 			if minHeapChunk.IsEmpty() {
-				fmt.Printf("Min heap top is empty! Ask User send chunk %d. \n", u.progress)
-				u.tcpConn.RequestPacket(u.progress)
+				log.Println("Nothing in the min heap")
 				continue
 			}
 
@@ -290,6 +259,14 @@ func (u *User) minHeapPollWorker(ctx context.Context, minHeapChunk *model.MinHea
 			for top := minHeapChunk.Peek(); top.Index < u.progress; top = minHeapChunk.Peek() {
 				log.Println("Drop chunk with index: ", top.Index)
 				heap.Pop(minHeapChunk)
+				if minHeapChunk.IsEmpty() {
+					break
+				}
+			}
+
+			if minHeapChunk.IsEmpty() {
+				log.Println("Nothing in the min heap")
+				continue
 			}
 
 			topIndex := minHeapChunk.Peek().Index
@@ -304,16 +281,16 @@ func (u *User) minHeapPollWorker(ctx context.Context, minHeapChunk *model.MinHea
 			dataToBeWritten <- &topOne
 			u.progress++
 		}
-	}(dataToBeWritten)
+	}()
 
 	select {
 	case <-ctx.Done():
-		for len(signal) > 0 {
-			<-signal
+		for len(processedData) > 0 {
+			<-processedData
 		}
 
-		signal <- nil
-		fmt.Println("minHeapPollWorker cancelled")
+		processedData <- nil
+		fmt.Println("minHeapWorker cancelled")
 	}
 }
 
@@ -342,7 +319,7 @@ func (u *User) saveToDiskWorker(ctx context.Context, dataToBeWritten chan *model
 				log.Printf("Fail to write index %d to disk. Ask user send it again. Error: %s", chunk.Index, writeErr)
 				continue
 			} else {
-				log.Printf("Write Chunk %d, %d bytes data into disk\n", chunk.Index, n)
+				log.Printf("Write Chunk %d, %d bytes data into disk. Goal %d\n", chunk.Index, n, u.fileInfo.TotalPacketCount)
 
 			}
 		}

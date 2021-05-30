@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gtxistxgao/safe-udp/common/consts"
-	"github.com/gtxistxgao/safe-udp/common/filemeta"
+	"github.com/gtxistxgao/safe-udp/common/fileoperator"
 	"log"
 	"net"
 )
@@ -30,11 +30,11 @@ func (t *TcpConn) SendPort(port string) {
 	}
 }
 
-func (t *TcpConn) GetFileInfo() filemeta.FileMeta {
+func (t *TcpConn) GetFileInfo() fileoperator.FileMeta {
 	log.Println("Waiting for file info")
 	info, _ := t.Wait()
 	log.Println("Raw file meta message", info)
-	fileMeta := filemeta.FileMeta{}
+	fileMeta := fileoperator.FileMeta{}
 	err := json.Unmarshal([]byte(info), &fileMeta)
 	if err != nil {
 		log.Println("Fail to parse file metadata, error: ", err)
